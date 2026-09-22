@@ -447,6 +447,7 @@
             }
           }
 
+          // SOBRESCRIBE/DEPURA POR COMPLETO EL STOCK ANTERIOR EN FIREBASE
           db.ref('locationItems').set(newMap, (error) => {
             if (error) {
               status.style.background = '#fee2e2';
