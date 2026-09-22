@@ -1,274 +1,468 @@
-import React, { useState } from 'react';
-import { Search, Copy, Check, Package, Layers } from 'lucide-react';
-import { DistinctSkuDetail } from '../data/stockStore';
-import { StockItem } from '../types';
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COSMOS PUNTA HERMOSA - Control de Ubicaciones (LA TINKA)</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+    body { background: #f8fafc; color: #0f172a; line-height: 1.5; }
+    
+    header { background: #0f172a; color: #fff; padding: 12px 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon { background: #f59e0b; color: #000; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; }
+    .brand-text { font-size: 15px; font-weight: 900; letter-spacing: -0.3px; }
+    .badge-tinka { background: rgba(245,158,11,0.2); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; margin-left: 6px; }
+    
+    .nav-tabs { display: flex; background: #1e293b; padding: 3px; border-radius: 8px; gap: 4px; }
+    .tab-btn { background: transparent; color: #94a3b8; border: none; padding: 6px 14px; font-size: 12px; font-weight: 700; border-radius: 6px; cursor: pointer; }
+    .tab-btn.active { background: #f59e0b; color: #000; }
+    
+    main { max-width: 1000px; margin: 20px auto; padding: 0 16px; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+    
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .grid-form { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    @media(min-width: 768px) { .grid-form { grid-template-columns: 320px 1fr; } }
+    
+    .input-box { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 700; background: #f8fafc; outline: none; }
+    .input-box:focus { border-color: #f59e0b; background: #fff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 800; border: none; cursor: pointer; text-decoration: none; }
+    .btn-amber { background: #f59e0b; color: #000; width: 100%; margin-top: 10px; }
+    .btn-amber:hover { background: #d97706; }
+    .btn-dark { background: #0f172a; color: #fff; }
+    .btn-dark:hover { background: #000; }
+    
+    .res-header { text-align: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; }
+    .res-label { font-size: 11px; font-weight: 900; color: #d97706; text-transform: uppercase; letter-spacing: 1px; }
+    .res-ubi { font-size: 32px; font-weight: 900; font-family: monospace; color: #0f172a; margin-top: 4px; }
+    
+    .sku-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; margin-top: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .sku-badge { background: #0f172a; color: #fff; font-size: 11px; font-family: monospace; font-weight: 900; padding: 3px 8px; border-radius: 6px; }
+    .status-badge { font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; border: 1px solid; }
+    .status-disp { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+    .status-dev { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .status-nodisp { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
 
-interface SkuDetailTableProps {
-  items: StockItem[];
-  distinctSkus: DistinctSkuDetail[];
-  location: string;
-  isCompact?: boolean;
-}
+    #mobile-scan-view { min-height: 100vh; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+    .mobile-container { max-width: 480px; width: 100%; margin: 20px auto; }
 
-export const SkuDetailTable: React.FC<SkuDetailTableProps> = ({
-  items,
-  distinctSkus,
-  location,
-  isCompact = false
-}) => {
-  const [search, setSearch] = useState('');
-  const [copiedSku, setCopiedSku] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'grouped' | 'detailed'>('grouped');
-
-  const handleCopy = (sku: string) => {
-    navigator.clipboard.writeText(sku);
-    setCopiedSku(sku);
-    setTimeout(() => setCopiedSku(null), 1800);
-  };
-
-  const filteredGrouped = distinctSkus.filter(s =>
-    s.sku.toLowerCase().includes(search.toLowerCase()) ||
-    s.description.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const filteredDetailed = items.filter(i =>
-    i.sku.toLowerCase().includes(search.toLowerCase()) ||
-    i.description.toLowerCase().includes(search.toLowerCase()) ||
-    i.warehouse.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const getStatusBadge = (status: string) => {
-    const s = status.toUpperCase();
-    if (s.includes('DISPONIBLE') && !s.includes('NO')) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-          Disponible
-        </span>
-      );
+    @page { size: 100mm 60mm; margin: 0; }
+    @media print {
+      body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+      .no-print { display: none !important; }
+      #print-area { display: block !important; }
+      .etiqueta-print {
+        width: 100mm !important; height: 60mm !important; max-width: 100mm !important; max-height: 60mm !important;
+        page-break-after: always; page-break-inside: avoid; border: 2px solid #000 !important; box-sizing: border-box !important;
+        display: flex !important; flex-direction: column !important; justify-content: space-between !important; padding: 10px !important; background: #fff !important;
+      }
     }
-    if (s.includes('DEVUELTO') || s.includes('REVISAR')) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-          Devuelto / Revisar
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-        {status}
-      </span>
-    );
-  };
+    .preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
+    .etiqueta-box { height: 210px; background: #fff; border: 2px solid #cbd5e1; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; }
+    .drop-box { border: 2px dashed #f59e0b; background: #fffbeb; border-radius: 14px; padding: 36px 20px; text-align: center; cursor: pointer; }
+  </style>
+</head>
+<body>
 
-  return (
-    <div id="sku-detail-container" className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-      {/* Header bar */}
-      <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-900 font-black text-sm">
-            <Package className="w-4 h-4 text-amber-700" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-              Detalle de SKU y Unidades en {location}
-            </h3>
-            <p className="text-xs text-slate-500">
-              {distinctSkus.length} SKU{distinctSkus.length === 1 ? '' : 's'} asignado{distinctSkus.length === 1 ? '' : 's'} • {items.reduce((a, b) => a + b.quantity, 0).toLocaleString()} unidades totales
-            </p>
-          </div>
-        </div>
-
-        {/* View toggle */}
-        <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-lg text-xs font-semibold self-start sm:self-auto">
-          <button
-            type="button"
-            id="btn-view-grouped"
-            onClick={() => setViewMode('grouped')}
-            className={`px-2.5 py-1.5 rounded-md transition-all ${
-              viewMode === 'grouped'
-                ? 'bg-white text-slate-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Agrupado por SKU ({distinctSkus.length})
-          </button>
-          <button
-            type="button"
-            id="btn-view-detailed"
-            onClick={() => setViewMode('detailed')}
-            className={`px-2.5 py-1.5 rounded-md transition-all ${
-              viewMode === 'detailed'
-                ? 'bg-white text-slate-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Por Lote/Almacén ({items.length})
-          </button>
-        </div>
+  <!-- VISTA 1: ESCANEO MÓVIL CON DETALLE DE SKUS -->
+  <div id="mobile-scan-view" style="display: none;">
+    <div class="mobile-container">
+      <div style="background: #0f172a; color: #fff; padding: 14px; border-radius: 16px; text-align: center; margin-bottom: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+        <div style="font-size: 13px; font-weight: 900; text-transform: uppercase;">COSMOS • PUNTA HERMOSA</div>
+        <div style="font-size: 11px; font-weight: 800; color: #fbbf24; margin-top: 2px;">CLIENTE: LA TINKA</div>
       </div>
 
-      {/* Search within location (if more than 2 SKUs) */}
-      {distinctSkus.length > 2 && (
-        <div className="px-4 py-3 border-b border-slate-100 bg-white">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              id="input-search-sku"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filtrar por código SKU o nombre de producto..."
-              className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg outline-hidden focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-400/20 transition-all"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
-              >
-                Limpiar
-              </button>
-            )}
-          </div>
+      <div class="card" style="margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: #d97706; letter-spacing: 0.5px;">STOCK ACTUAL EN UBICACIÓN</span>
+          <span id="mob-badge-skus" style="font-size: 11px; font-weight: 800; background: #dcfce7; color: #166534; padding: 2px 10px; border-radius: 999px; border: 1px solid #bbf7d0;">0 Productos</span>
         </div>
-      )}
-
-      {/* Table / List Content */}
-      <div className="overflow-x-auto">
-        {viewMode === 'grouped' ? (
-          filteredGrouped.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm">
-              No se encontraron SKUs que coincidan con &quot;{search}&quot;.
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse text-xs sm:text-sm" id="table-skus-grouped">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-4 w-36">Código SKU</th>
-                  <th className="py-3 px-4">Descripción del Producto</th>
-                  <th className="py-3 px-4 text-center hidden md:table-cell">Estado(s)</th>
-                  <th className="py-3 px-4 text-right w-32">Stock / UND</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredGrouped.map((item) => (
-                  <tr key={item.sku} className="hover:bg-amber-50/40 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900 align-top">
-                      <div className="flex items-center gap-1.5">
-                        <span>{item.sku}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(item.sku)}
-                          title="Copiar SKU"
-                          className="p-1 text-slate-400 hover:text-amber-600 rounded transition-colors"
-                        >
-                          {copiedSku === item.sku ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-800 font-medium">
-                      <div>{item.description}</div>
-                      {/* On mobile show badges below description */}
-                      <div className="flex flex-wrap gap-1 mt-1 md:hidden">
-                        {item.warehouses.map((w, idx) => (
-                          <span key={idx} className="text-[10px]">
-                            {getStatusBadge(w.warehouse)} ({w.quantity})
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-center hidden md:table-cell align-top">
-                      <div className="flex flex-col items-center gap-1">
-                        {item.warehouses.map((w, idx) => (
-                          <div key={idx} className="flex items-center gap-1 text-[11px]">
-                            {getStatusBadge(w.warehouse)}
-                            {item.warehouses.length > 1 && (
-                              <span className="text-slate-500 font-mono">({w.quantity})</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-right align-top">
-                      <span className="font-mono text-base font-black text-slate-900 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        {item.totalQuantity.toLocaleString()}
-                      </span>
-                      <span className="block text-[10px] font-bold text-slate-400 mt-0.5">UND</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        ) : (
-          filteredDetailed.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm">
-              No se encontraron registros que coincidan con &quot;{search}&quot;.
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse text-xs sm:text-sm" id="table-skus-detailed">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-4 w-36">Código SKU</th>
-                  <th className="py-3 px-4">Descripción</th>
-                  <th className="py-3 px-4">Almacén / Condición</th>
-                  <th className="py-3 px-4 text-right w-28">Unidades</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredDetailed.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                      <div className="flex items-center gap-1.5">
-                        <span>{item.sku}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(item.sku)}
-                          title="Copiar SKU"
-                          className="p-1 text-slate-400 hover:text-amber-600 rounded transition-colors"
-                        >
-                          {copiedSku === item.sku ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-800 font-medium">
-                      {item.description}
-                    </td>
-                    <td className="py-3 px-4">
-                      {getStatusBadge(item.warehouse)}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                      {item.quantity.toLocaleString()} <span className="text-[10px] text-slate-400">UND</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        )}
+        <div class="res-ubi" id="mob-ubi" style="font-size: 28px; text-align: left;">---</div>
       </div>
 
-      {/* Footer summary */}
-      <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
-        <span className="font-semibold">
-          Total: {viewMode === 'grouped' ? filteredGrouped.length : filteredDetailed.length} fila(s)
-        </span>
-        <span className="font-mono font-bold text-slate-800">
-          Suma: {(viewMode === 'grouped'
-            ? filteredGrouped.reduce((a, b) => a + b.totalQuantity, 0)
-            : filteredDetailed.reduce((a, b) => a + b.quantity, 0)
-          ).toLocaleString()} UND
-        </span>
+      <div id="mob-skus-detail-container"></div>
+
+      <div style="text-align: center; font-size: 11px; color: #94a3b8; margin: 20px 0;">
+        <a href="javascript:void(0)" onclick="openAdmin()" style="color: #64748b; text-decoration: none; font-weight: bold;">Acceso Administrativo / Gestión</a>
       </div>
     </div>
-  );
-};
+  </div>
 
+  <!-- VISTA 2: PANEL DE GESTIÓN (PC / ADMIN) -->
+  <div id="admin-view" class="no-print">
+    <header>
+      <div class="brand">
+        <div class="brand-icon">📦</div>
+        <div>
+          <div style="display: flex; align-items: center;">
+            <span class="brand-text">COSMOS • PUNTA HERMOSA</span>
+            <span class="badge-tinka">LA TINKA</span>
+          </div>
+          <div style="font-size: 11px; color: #94a3b8;">Sistema de Ubicaciones & Control de Stock</div>
+        </div>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('consult')" id="btn-tab-consult">1. Consultar Ubicación</button>
+        <button class="tab-btn" onclick="switchTab('print')" id="btn-tab-print">2. Imprimir Etiquetas</button>
+        <button class="tab-btn" onclick="switchTab('import')" id="btn-tab-import">3. Cargar Excel</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="tab-consult" class="tab-pane active">
+        <div class="grid-form">
+          <div class="card">
+            <h3 style="font-size: 14px; font-weight: 800; margin-bottom: 10px;">Consultar Ubicación</h3>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">Código de Posición:</label>
+              <input type="text" id="consult-input" class="input-box" placeholder="Ej: B01-01-01-02" autocomplete="off">
+            </div>
+            <button class="btn btn-amber" onclick="doQuery(document.getElementById('consult-input').value)">Buscar Posición</button>
+            <div style="margin-top: 14px; font-size: 11px; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 10px;">
+              Ejemplos: 
+              <a href="javascript:void(0)" onclick="doQuery('B01-01-01-02')" style="color: #d97706; font-weight: bold;">B01-01-01-02</a>,
+              <a href="javascript:void(0)" onclick="doQuery('B01-04-05-03')" style="color: #d97706; font-weight: bold;">B01-04-05-03</a>
+            </div>
+          </div>
+
+          <div class="card" style="min-height: 320px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 14px;">
+              <div>
+                <span class="res-label">STOCK ACTUAL EN UBICACIÓN</span>
+                <div class="res-ubi" id="adm-ubi" style="font-size: 24px; text-align: left; margin: 2px 0 0 0;">B01-01-01-02</div>
+              </div>
+              <div id="adm-badge-skus">
+                <span style="font-size: 11px; font-weight: 800; background: #dcfce7; color: #166534; padding: 2px 10px; border-radius: 999px; border: 1px solid #bbf7d0;">0 Productos</span>
+              </div>
+            </div>
+
+            <div id="adm-skus-detail-container"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-print" class="tab-pane">
+        <div class="card">
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px;">
+            <div>
+              <h3 style="font-size: 15px; font-weight: 800;">Impresión de Etiquetas (10 cm x 6 cm)</h3>
+              <p style="font-size: 11px; color: #64748b;">Formato térmico optimizado.</p>
+            </div>
+            <button class="btn btn-amber" style="width: auto; padding: 8px 16px;" onclick="window.print()">🖨️ Imprimir Todas</button>
+          </div>
+
+          <div style="display: flex; gap: 8px; background: #f8fafc; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; align-items: center;">
+            <span style="font-size: 11px; font-weight: 700;">URL GitHub:</span>
+            <input type="text" id="base-url-input" class="input-box" style="padding: 4px 8px; font-size: 12px;" value="https://richardcervantes01.github.io/stock-cosmos/">
+            <button class="btn btn-dark" style="padding: 4px 12px; font-size: 11px;" onclick="loadLabels()">Generar</button>
+          </div>
+
+          <div style="margin-top: 10px; font-size: 11px; color: #64748b;">
+            Total ubicaciones en memoria: <strong id="total-lbl-count" style="color: #0f172a;">0</strong>
+          </div>
+
+          <div class="preview-grid" id="label-previews"></div>
+        </div>
+      </section>
+
+      <section id="tab-import" class="tab-pane">
+        <div class="card">
+          <h3 style="font-size: 15px; font-weight: 800; margin-bottom: 6px;">Cargar Nuevo Excel Diario</h3>
+          <p style="font-size: 12px; color: #64748b; margin-bottom: 16px;">Al seleccionar el archivo, <strong>se depura y borra por completo el stock anterior</strong>.</p>
+
+          <div class="drop-box" onclick="document.getElementById('excel-upload').click()">
+            <div style="font-size: 28px; margin-bottom: 6px;">📂</div>
+            <div style="font-size: 14px; font-weight: 800; color: #0f172a;" id="upload-label">Haz clic aquí para seleccionar el archivo Excel (.xlsx)</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Filtro automático permanente de las 5 columnas requeridas</div>
+            <input type="file" id="excel-upload" accept=".xlsx, .xls" style="display: none;" onchange="processExcel(this.files[0])">
+          </div>
+
+          <div id="status-msg" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; margin-top: 14px;"></div>
+
+          <div style="margin-top: 16px; padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+            <div>
+              <div style="font-size: 12px; font-weight: 800;">Publicar en GitHub Pages</div>
+              <div style="font-size: 11px; color: #64748b;">Descarga el nuevo index.html para reemplazarlo en tu repositorio.</div>
+            </div>
+            <button class="btn btn-dark" style="width: auto;" onclick="downloadFreshHtml()">📥 Descargar index.html</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="print-area" style="display: none;"></div>
+
+  <!-- BASE DE DATOS DE ÍTEMS EMBEBIDA -->
+  <script id="embedded-data">
+    window.LOCATION_ITEMS = {full_items_json};
+  </script>
+
+  <script>
+    let locationItems = window.LOCATION_ITEMS || {};
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+      const pane = document.getElementById('tab-' + tabId);
+      const btn = document.getElementById('btn-tab-' + tabId);
+      if (pane) pane.classList.add('active');
+      if (btn) btn.classList.add('active');
+
+      if (tabId === 'print') loadLabels();
+    }
+
+    function doQuery(ubi) {
+      if (!ubi) return;
+      const clean = ubi.replace(/^UBI:/i, '').trim();
+      
+      let items = locationItems[clean];
+      let actualUbi = clean;
+      if (!items) {
+        for (let key in locationItems) {
+          if (key.toLowerCase() === clean.toLowerCase()) {
+            items = locationItems[key];
+            actualUbi = key;
+            break;
+          }
+        }
+      }
+      items = items || [];
+
+      renderSkuDetails(actualUbi, items, 'mob-ubi', 'mob-badge-skus', 'mob-skus-detail-container');
+      renderSkuDetails(actualUbi, items, 'adm-ubi', 'adm-badge-skus', 'adm-skus-detail-container');
+    }
+
+    function renderSkuDetails(ubi, items, ubiElId, badgeElId, containerElId) {
+      const ubiEl = document.getElementById(ubiElId);
+      const badgeEl = document.getElementById(badgeElId);
+      const container = document.getElementById(containerElId);
+      if (!container) return;
+
+      if (ubiEl) ubiEl.innerText = ubi;
+
+      const count = items.length;
+      const skuText = count === 1 ? '1 Producto (SKU)' : count + ' Productos (SKUs)';
+      if (badgeEl) {
+        badgeEl.innerHTML = `<span style="font-size: 11px; font-weight: 800; background: #dcfce7; color: #166534; padding: 2px 10px; border-radius: 999px; border: 1px solid #bbf7d0;">${skuText}</span>`;
+      }
+
+      container.innerHTML = '';
+      if (count === 0) {
+        container.innerHTML = `<div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">Sin stock registrado en esta ubicación.</div>`;
+        return;
+      }
+
+      items.forEach((item, idx) => {
+        let statusStyle = 'status-disp';
+        const almUpper = (item.almacen || '').toUpperCase();
+        if (almUpper.includes('DEVUELTO')) statusStyle = 'status-dev';
+        else if (almUpper.includes('NO DISPONIBLE')) statusStyle = 'status-nodisp';
+
+        const card = document.createElement('div');
+        card.className = 'sku-card';
+        card.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="sku-badge">SKU #${idx + 1}</span>
+              <span style="font-family: monospace; font-size: 14px; font-weight: 900; color: #0f172a;">${item.sku}</span>
+            </div>
+            <span class="status-badge ${statusStyle}">${item.almacen || 'DISPONIBLE'}</span>
+          </div>
+
+          <div style="margin-bottom: 10px;">
+            <span style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; display: block;">DESCRIPCIÓN DEL PRODUCTO</span>
+            <p style="font-size: 13px; font-weight: 800; color: #1e293b; margin-top: 2px; line-height: 1.3;">${item.producto}</p>
+          </div>
+
+          <div style="border-top: 1px solid #f1f5f9; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Cantidad Actual en Stock:</span>
+            <div>
+              <strong style="font-size: 16px; font-weight: 900; color: #d97706; font-family: monospace;">${item.cantidad.toLocaleString()}</strong>
+              <span style="font-size: 11px; font-weight: 800; color: #64748b; margin-left: 2px;">UND</span>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function checkUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const ubi = params.get('ubi') || params.get('ubicacion');
+      if (ubi) {
+        document.getElementById('admin-view').style.display = 'none';
+        document.getElementById('mobile-scan-view').style.display = 'block';
+        doQuery(ubi);
+      } else {
+        document.getElementById('mobile-scan-view').style.display = 'none';
+        document.getElementById('admin-view').style.display = 'block';
+        doQuery('B01-01-01-02');
+      }
+    }
+
+    function openAdmin() {
+      document.getElementById('mobile-scan-view').style.display = 'none';
+      document.getElementById('admin-view').style.display = 'block';
+      switchTab('consult');
+    }
+
+    function loadLabels() {
+      const container = document.getElementById('label-previews');
+      const printArea = document.getElementById('print-area');
+      const countEl = document.getElementById('total-lbl-count');
+      if (!container) return;
+
+      container.innerHTML = '';
+      printArea.innerHTML = '';
+
+      const ubis = Object.keys(locationItems);
+      countEl.innerText = ubis.length.toLocaleString();
+
+      const base = document.getElementById('base-url-input').value.trim();
+      const previewLimit = Math.min(ubis.length, 30);
+
+      ubis.forEach((ubi, i) => {
+        const sep = base.includes('?') ? '&' : '?';
+        const targetUrl = base + sep + 'ubi=' + encodeURIComponent(ubi);
+
+        if (i < previewLimit) {
+          const card = createLabelCard(ubi, targetUrl, false);
+          container.appendChild(card);
+        }
+
+        const printCard = createLabelCard(ubi, targetUrl, true);
+        printArea.appendChild(printCard);
+      });
+    }
+
+    function createLabelCard(ubi, qrUrl, isPrint) {
+      const el = document.createElement('div');
+      if (isPrint) {
+        el.className = 'etiqueta-print';
+      } else {
+        el.className = 'etiqueta-box';
+      }
+
+      el.innerHTML = `
+        <div style="flex: 1; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+          <div style="flex: 1;">
+            <span style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; letter-spacing: 1px; display: block; margin-bottom: 2px;">UBICACIÓN</span>
+            <div style="font-size: 21px; font-weight: 900; font-family: monospace; color: #000; line-height: 1.1;">${ubi}</div>
+            <div style="margin-top: 10px; font-size: 12px; font-weight: 900; color: #000; text-transform: uppercase;">
+              CLIENTE: <span style="text-decoration: underline;">LA TINKA</span>
+            </div>
+          </div>
+          <div style="flex-shrink: 0; width: 136px; height: 136px; border: 2px solid #000; border-radius: 8px; padding: 4px; display: flex; align-items: center; justify-content: center; background: #fff;">
+            <div class="qr-target" style="width: 128px; height: 128px;"></div>
+          </div>
+        </div>
+        <div style="border-top: 2px solid #000; padding-top: 4px; display: flex; justify-content: space-between; font-size: 10px; font-weight: 900; font-family: monospace; color: #000;">
+          <span>COSMOS PUNTA HERMOSA</span>
+          <span style="font-size: 8px; color: #64748b;">${new Date().toLocaleDateString('es-PE')}</span>
+        </div>
+      `;
+
+      new QRCode(el.querySelector('.qr-target'), {
+        text: qrUrl,
+        width: 128,
+        height: 128,
+        colorDark: "#000",
+        colorLight: "#fff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      return el;
+    }
+
+    function processExcel(file) {
+      if (!file) return;
+      const status = document.getElementById('status-msg');
+      status.style.display = 'block';
+      status.style.background = '#dbeafe';
+      status.style.color = '#1e40af';
+      status.innerText = 'Leyendo y depurando stock...';
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          if (json.length < 2) throw new Error('Archivo vacío');
+
+          const headers = json[0];
+          let colUbi = -1, colSku = -1, colCant = -1, colProd = -1, colAlm = -1;
+
+          headers.forEach((h, i) => {
+            const txt = String(h || '').toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            if (txt.includes('ubi')) colUbi = i;
+            else if (txt.includes('cod') || txt.includes('sku')) colSku = i;
+            else if (txt.includes('cant')) colCant = i;
+            else if (txt.includes('prod') || txt.includes('desc')) colProd = i;
+            else if (txt.includes('alm')) colAlm = i;
+          });
+
+          if (colUbi === -1 || colSku === -1) throw new Error('No se encontraron las columnas requeridas (Código / Ubicaciones).');
+
+          locationItems = {};
+
+          for (let r = 1; r < json.length; r++) {
+            const row = json[r];
+            const ubi = String(row[colUbi] || '').trim();
+            const sku = String(row[colSku] || '').trim();
+            const prod = String(row[colProd] || '').trim();
+            const alm = String(row[colAlm] || '').trim();
+            const cant = Number(row[colCant]) || 0;
+
+            if (sku && ubi && !prod.startsWith('Nro Registros')) {
+              if (!locationItems[ubi]) locationItems[ubi] = [];
+              locationItems[ubi].push({
+                sku: sku,
+                producto: prod,
+                almacen: alm || 'DISPONIBLE',
+                cantidad: cant
+              });
+            }
+          }
+
+          status.style.background = '#dcfce7';
+          status.style.color = '#166534';
+          status.innerHTML = `<strong>¡Actualizado!</strong> Se depuró la base y se cargaron <strong>${Object.keys(locationItems).length}</strong> ubicaciones.`;
+
+          doQuery(Object.keys(locationItems)[0]);
+        } catch(err) {
+          status.style.background = '#fee2e2';
+          status.style.color = '#991b1b';
+          status.innerText = 'Error: ' + err.message;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function downloadFreshHtml() {
+      const script = document.getElementById('embedded-data');
+      script.textContent = "\n    window.LOCATION_ITEMS = " + JSON.stringify(locationItems) + ";\n  ";
+
+      const fullHtml = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+      const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'index.html';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    window.addEventListener('DOMContentLoaded', checkUrl);
+  </script>
+</body>
+</html>
